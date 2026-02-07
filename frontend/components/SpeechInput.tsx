@@ -10,14 +10,23 @@ interface SpeechInputProps {
 
 declare global {
   interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
+    SpeechRecognition?: unknown;
+    webkitSpeechRecognition?: unknown;
   }
 }
 
 const SpeechRecognitionAPI =
   typeof window !== "undefined"
-    ? window.SpeechRecognition || window.webkitSpeechRecognition
+    ? (window.SpeechRecognition || window.webkitSpeechRecognition) as new () => {
+        continuous: boolean;
+        interimResults: boolean;
+        lang: string;
+        onresult: ((event: unknown) => void) | null;
+        onerror: ((event: unknown) => void) | null;
+        onend: (() => void) | null;
+        start: () => void;
+        stop: () => void;
+      }
     : null;
 
 export function SpeechInput({
@@ -27,7 +36,7 @@ export function SpeechInput({
 }: SpeechInputProps) {
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
-  const recognitionRef = useRef<InstanceType<typeof SpeechRecognition> | null>(null);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const committedRef = useRef("");
 
   useEffect(() => {
@@ -44,10 +53,11 @@ export function SpeechInput({
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: unknown) => {
+      const e = event as { resultIndex: number; results: { length: number; [i: number]: { isFinal: boolean; [0]: { transcript: string } } } };
       let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i];
         const text = result[0].transcript;
         if (result.isFinal) {
           committedRef.current += (committedRef.current ? " " : "") + text;
@@ -58,8 +68,9 @@ export function SpeechInput({
       onTranscriptChange(committedRef.current + (interim ? " " + interim : ""));
     };
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error !== "aborted") {
+    recognition.onerror = (event: unknown) => {
+      const err = event as { error?: string };
+      if (err.error !== "aborted") {
         setIsListening(false);
       }
     };
