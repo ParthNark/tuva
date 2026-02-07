@@ -1,8 +1,14 @@
 import { TUTOR_SYSTEM_PROMPT } from "./prompts";
 
+export interface ConversationTurn {
+  user: string;
+  assistant: string;
+}
+
 export interface FeedbackInput {
   image: string;
   transcript: string;
+  history?: ConversationTurn[];
 }
 
 export interface FeedbackResult {
@@ -14,7 +20,7 @@ export interface FeedbackError {
 }
 
 export async function getFeedback(input: FeedbackInput): Promise<FeedbackResult | FeedbackError> {
-  const { image, transcript } = input;
+  const { image, transcript, history = [] } = input;
 
   if (!image) {
     return { error: "Missing image" };
@@ -30,6 +36,30 @@ export async function getFeedback(input: FeedbackInput): Promise<FeedbackResult 
   const model = process.env.FEATHERLESS_MODEL || "google/gemma-3-27b-it";
   const dataUrl = image.startsWith("data:") ? image : `data:image/jpeg;base64,${image}`;
 
+  const messages: Array<{ role: string; content: unknown }> = [
+    { role: "system", content: TUTOR_SYSTEM_PROMPT },
+  ];
+
+  for (const turn of history) {
+    messages.push({
+      role: "user",
+      content: `The student said: "${turn.user}". (No image in this earlier turn.)`,
+    });
+    messages.push({ role: "assistant", content: turn.assistant });
+  }
+
+  const currentUserText = transcriptText
+    ? `The student says: "${transcriptText}". What feedback do you have?`
+    : "Look at what the student is working on. What feedback or observations do you have?";
+
+  messages.push({
+    role: "user",
+    content: [
+      { type: "text", text: currentUserText },
+      { type: "image_url", image_url: { url: dataUrl } },
+    ],
+  });
+
   const response = await fetch("https://api.featherless.ai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -38,24 +68,7 @@ export async function getFeedback(input: FeedbackInput): Promise<FeedbackResult 
     },
     body: JSON.stringify({
       model,
-      messages: [
-        { role: "system", content: TUTOR_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: transcriptText
-                ? `The student says: "${transcriptText}". What feedback do you have?`
-                : "Look at what the student is working on. What feedback or observations do you have?",
-            },
-            {
-              type: "image_url",
-              image_url: { url: dataUrl },
-            },
-          ],
-        },
-      ],
+      messages,
     }),
   });
 

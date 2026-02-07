@@ -26,6 +26,7 @@ export function CameraInterface() {
   const webcamRef = useRef<Webcam>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const [cameraPermission, setCameraPermission] = useState<PermissionState>("idle");
   const [micPermission, setMicPermission] = useState<PermissionState>("idle");
@@ -35,7 +36,11 @@ export function CameraInterface() {
   const [mounted, setMounted] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState<{ user: string; assistant: string }[]>([]);
+  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
   const transcriptRef = useRef("");
+  const committedRef = useRef("");
+  const interimRef = useRef("");
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
   useEffect(() => {
@@ -110,11 +115,15 @@ export function CameraInterface() {
 
     setMicError(null);
     setFeedback(null);
+    setLastTranscript(null);
     audioChunksRef.current = [];
     transcriptRef.current = "";
+    committedRef.current = "";
+    interimRef.current = "";
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
       const recorder = new MediaRecorder(stream);
 
       recorder.ondataavailable = (e) => {
@@ -122,7 +131,8 @@ export function CameraInterface() {
       };
 
       recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
       };
 
       recorder.start(100);
@@ -134,11 +144,18 @@ export function CameraInterface() {
         recognition.interimResults = true;
         recognition.lang = "en-US";
         recognition.onresult = (e: { resultIndex: number; results: { length: number; [i: number]: { isFinal: boolean; [0]: { transcript: string } } } }) => {
+          let interim = "";
           for (let i = e.resultIndex; i < e.results.length; i++) {
             const result = e.results[i];
             const text = result[0].transcript;
-            if (result.isFinal) transcriptRef.current += (transcriptRef.current ? " " : "") + text;
+            if (result.isFinal) {
+              committedRef.current += (committedRef.current ? " " : "") + text;
+            } else {
+              interim += (interim ? " " : "") + text;
+            }
           }
+          interimRef.current = interim;
+          transcriptRef.current = committedRef.current + (interim ? " " + interim : "");
         };
         recognition.onerror = () => {};
         recognition.onend = () => { recognitionRef.current = null; };
@@ -165,13 +182,24 @@ export function CameraInterface() {
       recognitionRef.current = null;
     }
 
+    const stopPromise = new Promise<void>((resolve) => {
+      recorder.onstop = () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        resolve();
+      };
+    });
+
     recorder.stop();
     mediaRecorderRef.current = null;
     setIsRecording(false);
     setLoading(true);
     setFeedback(null);
 
-    const transcript = transcriptRef.current.trim();
+    await stopPromise;
+    await new Promise((r) => setTimeout(r, 200));
+
+    let transcript = transcriptRef.current.trim();
 
     setTimeout(async () => {
       const imageSrc = webcamRef.current?.getScreenshot();
@@ -184,10 +212,30 @@ export function CameraInterface() {
       }
 
       try {
+        if (!transcript && audioChunksRef.current.length > 0) {
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "recording.webm");
+          const transcribeRes = await fetch("/api/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+          if (transcribeRes.ok) {
+            const { text } = await transcribeRes.json();
+            transcript = (text ?? "").trim();
+          }
+        }
+
+        const transcriptToUse = transcript || "I'm explaining what I'm working on.";
+
         const feedbackRes = await fetch("/api/feedback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64, transcript: transcript || "I'm explaining what I'm working on." }),
+          body: JSON.stringify({
+            image: base64,
+            transcript: transcriptToUse,
+            history: conversationHistory,
+          }),
         });
 
         const feedbackData = await feedbackRes.json();
@@ -197,6 +245,9 @@ export function CameraInterface() {
 
         const text = feedbackData.text || "";
         setFeedback(text);
+
+        setLastTranscript(transcript || null);
+        setConversationHistory((prev) => [...prev, { user: transcriptToUse, assistant: text }]);
 
         if (text) {
           const speechRes = await fetch("/api/speech", {
@@ -220,7 +271,7 @@ export function CameraInterface() {
         setLoading(false);
       }
     }, 150);
-  }, []);
+  }, [conversationHistory]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) {
@@ -443,6 +494,16 @@ export function CameraInterface() {
               animate={{ opacity: 1, y: 0 }}
               className="p-4 rounded-xl bg-slate-800/40 backdrop-blur-md border border-cyan-500/20"
             >
+              {lastTranscript && (
+                <p className="text-slate-400 text-xs mb-2 italic">
+                  You said: &quot;{lastTranscript}&quot;
+                </p>
+              )}
+              {!lastTranscript && (
+                <p className="text-amber-400/80 text-xs mb-2">
+                  No speech detected — using fallback
+                </p>
+              )}
               <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap mb-3">
                 {feedback}
               </p>

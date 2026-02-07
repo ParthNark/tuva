@@ -8,6 +8,7 @@ export async function POST(request: NextRequest) {
     const result = await getFeedback({
       image: body.image,
       transcript: body.transcript,
+      history: body.history ?? [],
     });
 
     if ("error" in result) {
