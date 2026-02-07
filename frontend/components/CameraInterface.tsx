@@ -22,7 +22,11 @@ const SpeechRecognitionAPI =
 
 type PermissionState = "idle" | "requesting" | "granted" | "denied" | "error";
 
-export function CameraInterface() {
+export interface CameraInterfaceProps {
+  embedded?: boolean;
+}
+
+export function CameraInterface({ embedded }: CameraInterfaceProps = {}) {
   const webcamRef = useRef<Webcam>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -285,7 +289,9 @@ export function CameraInterface() {
   const hasMic = micPermission === "granted";
 
   return (
-    <div className="min-h-screen bg-[#0d0d14] text-slate-100 p-4 md:p-6">
+    <div
+      className={`text-slate-100 ${embedded ? "min-h-0 p-0" : "min-h-screen p-4 md:p-6"}`}
+    >
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Sidebar } from "./components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "Tuva – Learning Tutor",
+  title: "Cargo – Teach to Learn",
   description: "An AI tutor that learns from you through camera and voice",
 };
 
@@ -13,8 +14,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased min-h-screen bg-[#0d0d14] text-slate-100">
-        {children}
+      <body className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100 antialiased">
+        <div className="flex min-h-screen">
+          <Sidebar />
+          <main className="ml-60 flex-1">{children}</main>
+        </div>
       </body>
     </html>
   );
