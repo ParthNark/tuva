@@ -3,7 +3,7 @@ import "./globals.css";
 import { Sidebar } from "./components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "Cargo – Teach to Learn",
+  title: "Tuva – Teach to Learn",
   description: "An AI tutor that learns from you through camera and voice",
 };
 

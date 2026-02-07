@@ -24,7 +24,7 @@ export function Sidebar() {
               animate={{ opacity: [1, 0.85, 1] }}
               transition={{ duration: 3, repeat: Infinity }}
             >
-              Cargo
+            Tuva
             </motion.span>
           </Link>
         </div>
