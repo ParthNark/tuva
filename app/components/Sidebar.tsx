@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LayoutDashboard, History, Settings } from "lucide-react";
+import { LayoutDashboard, History, Settings, LogOut } from "lucide-react";
+import { useAuth0 } from "@auth0/auth0-react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -13,6 +14,11 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user, isAuthenticated, logout } = useAuth0();
+
+  const handleLogout = () => {
+    logout({ logoutParams: { returnTo: window.location.origin } });
+  };
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-60 flex-shrink-0 border-r border-white/10 bg-slate-900/50 backdrop-blur-md">
@@ -50,6 +56,22 @@ export function Sidebar() {
             );
           })}
         </nav>
+
+        {isAuthenticated && (
+          <div className="border-t border-white/5 p-4 text-sm">
+            <div className="mb-3">
+              <p className="font-semibold text-slate-100">{user?.name ?? user?.email ?? "Ready to teach"}</p>
+              <p className="text-xs text-slate-500">Signed in to Tuva</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-200"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );
