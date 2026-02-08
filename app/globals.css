@@ -185,4 +185,17 @@
   .hover-text-theme:hover {
     color: var(--text);
   }
+
+  .darkveil-canvas {
+    height: 100%;
+    width: 100%;
+    display: block;
+    opacity: 0.55;
+    mix-blend-mode: soft-light;
+  }
+
+  .darkveil-canvas--light {
+    opacity: 0.25;
+    mix-blend-mode: screen;
+  }
 }

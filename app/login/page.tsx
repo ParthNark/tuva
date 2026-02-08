@@ -16,7 +16,7 @@ export default function LoginPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-app">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-theme">Loading...</div>
       </div>
     );
@@ -24,14 +24,14 @@ export default function LoginPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-app">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-red-400">Error: {error.message}</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-app">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-theme mb-2">Tuva</h1>

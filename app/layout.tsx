@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "./components/AuthProvider";
 import { AppFrame } from "./components/AppFrame";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { DarkVeilBackground } from "./components/DarkVeilBackground";
 
 export const metadata: Metadata = {
   title: "Tuva – Teach to Learn",
@@ -16,8 +17,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen antialiased">
+      <body className="min-h-screen antialiased relative overflow-x-hidden">
         <ThemeProvider>
+          <DarkVeilBackground />
           <AuthProvider>
             <AppFrame>{children}</AppFrame>
           </AuthProvider>
