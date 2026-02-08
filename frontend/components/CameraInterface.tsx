@@ -28,9 +28,11 @@ export interface CameraInterfaceProps {
   userId?: string;
 }
 
+type SessionMode = "feynman" | "test" | "testing";
+
 export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {}) {
   const { user } = useAuth0();
-  const resolvedUserId = userId || user?.sub || "";
+  const resolvedUserId = userId || user?.sub || user?.email || "";
   const [sessionId] = useState(() =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -51,6 +53,8 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
   const [loading, setLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<{ user: string; assistant: string }[]>([]);
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
+  const [mode, setMode] = useState<SessionMode>("feynman");
+  const isTestMode = mode === "test" || mode === "testing";
   const transcriptRef = useRef("");
   const committedRef = useRef("");
   const interimRef = useRef("");
@@ -59,6 +63,13 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (isRecording) return;
+    setFeedback(null);
+    setLastTranscript(null);
+    setConversationHistory([]);
+  }, [mode, isRecording]);
 
   const isMediaSupported =
     mounted && typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
@@ -239,7 +250,11 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
           }
         }
 
-        const transcriptToUse = transcript || "I'm explaining what I'm working on.";
+        const transcriptToUse =
+          transcript ||
+          (isTestMode
+            ? "Start the test with a question for me to answer."
+            : "I'm explaining what I'm working on.");
 
         const feedbackRes = await fetch("/api/feedback", {
           method: "POST",
@@ -250,6 +265,8 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
             history: conversationHistory,
             userId: resolvedUserId,
             sessionId,
+            mode,
+            mode,
           }),
         });
 
@@ -268,7 +285,7 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
           const speechRes = await fetch("/api/speech", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
+            body: JSON.stringify({ text, mode }),
           });
 
           if (speechRes.ok) {
@@ -286,7 +303,7 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
         setLoading(false);
       }
     }, 150);
-  }, [conversationHistory]);
+  }, [conversationHistory, mode]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) {
@@ -308,13 +325,31 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
         animate={{ opacity: 1, y: 0 }}
         className="max-w-2xl mx-auto space-y-6"
       >
-        <header className="text-center">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
-            Feynman Method
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Explain concepts to the AI. Teach to learn.
-          </p>
+        <header className="text-center space-y-3">
+          <div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+              {mode === "feynman" ? "Feynman Method" : mode === "test" ? "Test Mode" : "Testing Mode"}
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">
+              {mode === "feynman"
+                ? "Explain concepts to the AI. Teach to learn."
+                : "Get quizzed with mixed question types and visual answers."}
+            </p>
+          </div>
+          <div className="flex justify-center">
+            <label className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+              Mode
+              <select
+                value={mode}
+                onChange={(event) => setMode(event.target.value as SessionMode)}
+                className="rounded-md border border-white/10 bg-slate-900/60 px-3 py-1 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+              >
+                <option value="feynman">Feynman</option>
+                <option value="test">Test</option>
+                <option value="testing">Testing</option>
+              </select>
+            </label>
+          </div>
         </header>
 
         <motion.div
@@ -530,7 +565,7 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
                   const res = await fetch("/api/speech", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ text: feedback }),
+                    body: JSON.stringify({ text: feedback, mode }),
                   });
                   if (res.ok) {
                     const blob = await res.blob();

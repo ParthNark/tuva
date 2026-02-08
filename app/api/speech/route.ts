@@ -3,9 +3,13 @@ import { generateSpeech } from "@/backend/speech";
 
 export async function POST(request: NextRequest) {
   try {
-    const { text } = await request.json();
+    const { text, mode } = await request.json();
+    const isTestMode = mode === "test" || mode === "testing";
+    const voiceId = isTestMode
+      ? process.env.ELEVENLABS_TEST_VOICE_ID
+      : undefined;
 
-    const result = await generateSpeech({ text });
+    const result = await generateSpeech({ text, voiceId });
 
     if (result instanceof ArrayBuffer) {
       return new NextResponse(result, {
