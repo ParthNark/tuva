@@ -5,10 +5,87 @@ import { ProtectedRoute } from "@/app/components/ProtectedRoute";
 import { motion } from "framer-motion";
 import { Mic, Video, Bell, Palette } from "lucide-react";
 import { useTheme } from "@/app/hooks/useTheme";
+import { useEffect, useState } from "react";
 
 export default function SettingsPage() {
   const { theme, setTheme, themes } = useTheme();
   const currentTheme = themes.find((option) => option.id === theme);
+  const [cameraStatus, setCameraStatus] = useState<
+    "checking" | "granted" | "denied" | "prompt" | "unavailable"
+  >("checking");
+  const [microphoneStatus, setMicrophoneStatus] = useState<
+    "checking" | "granted" | "denied" | "prompt" | "unavailable"
+  >("checking");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkPermission = async (
+      name: PermissionName,
+      setStatus: (status: typeof cameraStatus) => void,
+    ) => {
+      if (typeof window === "undefined") return;
+      if (!navigator?.mediaDevices) {
+        if (isMounted) setStatus("unavailable");
+        return;
+      }
+
+      try {
+        if (navigator.permissions?.query) {
+          const result = await navigator.permissions.query({ name });
+          if (!isMounted) return;
+          setStatus(result.state);
+          result.onchange = () => {
+            if (isMounted) {
+              setStatus(result.state);
+            }
+          };
+          return;
+        }
+      } catch {
+        // Ignore and fall back to prompt state.
+      }
+
+      if (isMounted) setStatus("prompt");
+    };
+
+    checkPermission("camera" as PermissionName, setCameraStatus);
+    checkPermission("microphone" as PermissionName, setMicrophoneStatus);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const cameraStatusLabel = (() => {
+    switch (cameraStatus) {
+      case "granted":
+        return "Camera access granted";
+      case "denied":
+        return "Camera access denied";
+      case "prompt":
+        return "Camera access not requested yet";
+      case "unavailable":
+        return "Camera access unavailable";
+      default:
+        return "Checking camera access...";
+    }
+  })();
+
+  const microphoneStatusLabel = (() => {
+    switch (microphoneStatus) {
+      case "granted":
+        return "Microphone access granted";
+      case "denied":
+        return "Microphone access denied";
+      case "prompt":
+        return "Microphone access not requested yet";
+      case "unavailable":
+        return "Microphone access unavailable";
+      default:
+        return "Checking microphone access...";
+    }
+  })();
 
   return (
     <ProtectedRoute>
@@ -31,7 +108,8 @@ export default function SettingsPage() {
                 <Mic className="h-4 w-4 text-accent" />
                 Microphone
               </h2>
-              <p className="mt-1 text-sm text-muted">
+              <p className="mt-1 text-sm text-muted">{microphoneStatusLabel}</p>
+              <p className="mt-2 text-xs text-subtle">
                 Camera and microphone permissions are managed by your browser.
               </p>
             </motion.section>
@@ -46,7 +124,8 @@ export default function SettingsPage() {
                 <Video className="h-4 w-4 text-accent" />
                 Camera
               </h2>
-              <p className="mt-1 text-sm text-muted">
+              <p className="mt-1 text-sm text-muted">{cameraStatusLabel}</p>
+              <p className="mt-2 text-xs text-subtle">
                 Grant camera access when prompted to use the Main Stage.
               </p>
             </motion.section>
