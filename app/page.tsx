@@ -3,6 +3,7 @@
 import { CameraInterface } from "@/frontend/components/CameraInterface";
 import { PageTransition } from "./components/PageTransition";
 import { MessageSquare } from "lucide-react";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const MOCK_RECENT_FEEDBACK = [
   { id: 1, text: "Great start! Try explaining recursion as 'a function that calls itself' — that's the core idea.", time: "2 min ago" },
@@ -23,8 +24,9 @@ function formatSessionTime() {
 
 export default function DashboardPage() {
   return (
-    <PageTransition>
-      <div className="flex h-full min-h-screen gap-6 p-6">
+    <ProtectedRoute>
+      <PageTransition>
+        <div className="flex h-full min-h-screen gap-6 p-6">
         <div className="flex flex-1 flex-col">
           <div className="mb-4 rounded-xl border border-white/10 bg-slate-900/50 p-4 backdrop-blur-md">
             <h2 className="text-sm font-medium text-slate-400">Current Session</h2>
@@ -57,7 +59,8 @@ export default function DashboardPage() {
             </ul>
           </div>
         </aside>
-      </div>
-    </PageTransition>
+        </div>
+      </PageTransition>
+    </ProtectedRoute>
   );
 }

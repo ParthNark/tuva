@@ -2,6 +2,9 @@
 /node_modules
 /.pnp
 .pnp.js
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 
 # testing
 /coverage

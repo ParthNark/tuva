@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Sidebar } from "./components/Sidebar";
+import { AuthProvider } from "./components/AuthProvider";
+import { AppFrame } from "./components/AppFrame";
 
 export const metadata: Metadata = {
   title: "Tuva – Teach to Learn",
@@ -15,10 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100 antialiased">
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="ml-60 flex-1">{children}</main>
-        </div>
+        <AuthProvider>
+          <AppFrame>{children}</AppFrame>
+        </AuthProvider>
       </body>
     </html>
   );
