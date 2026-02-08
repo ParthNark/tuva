@@ -16,9 +16,9 @@ const MOCK_SESSIONS = [
 
 function getScoreColor(score: number) {
   if (score >= 90) return "text-emerald-400";
-  if (score >= 80) return "text-cyan-400";
+  if (score >= 80) return "text-accent";
   if (score >= 70) return "text-amber-400";
-  return "text-slate-400";
+  return "text-subtle";
 }
 
 export default function HistoryPage() {
@@ -27,8 +27,10 @@ export default function HistoryPage() {
       <PageTransition>
         <div className="p-6">
           <header className="mb-8">
-            <h1 className="text-2xl font-bold text-slate-100">Past Learning Sessions</h1>
-            <p className="mt-1 text-sm text-slate-400">
+            <h1 className="text-2xl font-bold text-theme">
+              Past Learning Sessions
+            </h1>
+            <p className="mt-1 text-sm text-muted">
               Review your teaching sessions and Simplicity Scores
             </p>
           </header>
@@ -40,21 +42,23 @@ export default function HistoryPage() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="group rounded-xl border border-white/10 bg-slate-900/50 p-5 backdrop-blur-md transition-colors hover:border-cyan-500/30 hover:bg-slate-900/70"
+                className="group rounded-xl border border-card bg-card p-5 backdrop-blur-md transition-colors hover-border-accent-soft hover-bg-card-strong"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-slate-400">
+                    <div className="flex items-center gap-2 text-muted">
                       <Calendar className="h-4 w-4 shrink-0" />
                       <span className="text-xs">{session.date}</span>
                     </div>
-                    <h3 className="mt-2 flex items-center gap-2 font-medium text-slate-200">
-                      <BookOpen className="h-4 w-4 shrink-0 text-cyan-400/80" />
+                    <h3 className="mt-2 flex items-center gap-2 font-medium text-soft">
+                      <BookOpen className="h-4 w-4 shrink-0 text-accent-soft" />
                       {session.topic}
                     </h3>
                   </div>
                   <div
-                    className={`flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-slate-800/60 px-3 py-1.5 ${getScoreColor(session.score)}`}
+                    className={`flex shrink-0 items-center gap-1 rounded-lg border border-card bg-card-muted px-3 py-1.5 ${getScoreColor(
+                      session.score,
+                    )}`}
                   >
                     <TrendingUp className="h-4 w-4" />
                     <span className="text-sm font-semibold">{session.score}/100</span>

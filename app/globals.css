@@ -1,3 +1,188 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --app-bg-from: #0b1120;
+    --app-bg-to: #0f172a;
+    --text: #e2e8f0;
+    --text-soft: #cbd5e1;
+    --text-muted: #94a3b8;
+    --text-subtle: #64748b;
+    --card-bg: rgba(15, 23, 42, 0.55);
+    --card-bg-soft: rgba(15, 23, 42, 0.35);
+    --card-bg-strong: rgba(15, 23, 42, 0.75);
+    --card-bg-muted: rgba(30, 41, 59, 0.45);
+    --card-border: rgba(255, 255, 255, 0.12);
+    --card-border-subtle: rgba(255, 255, 255, 0.06);
+    --accent: #22d3ee;
+    --accent-soft: rgba(34, 211, 238, 0.18);
+    --accent-soft-text: #67e8f9;
+    --accent-strong: #2563eb;
+    --accent-strong-hover: #1d4ed8;
+  }
+
+  [data-theme="dracula"] {
+    color-scheme: dark;
+    --app-bg-from: #1f1a30;
+    --app-bg-to: #141021;
+    --text: #f1f5f9;
+    --text-soft: #e2e8f0;
+    --text-muted: #b7b2c8;
+    --text-subtle: #8b86a5;
+    --card-bg: rgba(36, 30, 58, 0.6);
+    --card-bg-soft: rgba(36, 30, 58, 0.4);
+    --card-bg-strong: rgba(36, 30, 58, 0.8);
+    --card-bg-muted: rgba(53, 44, 86, 0.55);
+    --card-border: rgba(248, 250, 252, 0.14);
+    --card-border-subtle: rgba(248, 250, 252, 0.08);
+    --accent: #ff79c6;
+    --accent-soft: rgba(255, 121, 198, 0.2);
+    --accent-soft-text: #ff9bd3;
+    --accent-strong: #bd93f9;
+    --accent-strong-hover: #a77ff0;
+  }
+
+  [data-theme="nord"] {
+    color-scheme: dark;
+    --app-bg-from: #202833;
+    --app-bg-to: #1b212a;
+    --text: #e5e9f0;
+    --text-soft: #d8dee9;
+    --text-muted: #a7b1c2;
+    --text-subtle: #7f8ca1;
+    --card-bg: rgba(37, 43, 58, 0.6);
+    --card-bg-soft: rgba(37, 43, 58, 0.4);
+    --card-bg-strong: rgba(37, 43, 58, 0.8);
+    --card-bg-muted: rgba(54, 62, 77, 0.55);
+    --card-border: rgba(229, 233, 240, 0.18);
+    --card-border-subtle: rgba(229, 233, 240, 0.1);
+    --accent: #88c0d0;
+    --accent-soft: rgba(136, 192, 208, 0.2);
+    --accent-soft-text: #9dd3e3;
+    --accent-strong: #5e81ac;
+    --accent-strong-hover: #4b6b94;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+    --app-bg-from: #fdf6e3;
+    --app-bg-to: #f4efe1;
+    --text: #3c4a59;
+    --text-soft: #4e5e6e;
+    --text-muted: #65758a;
+    --text-subtle: #7a8a9e;
+    --card-bg: rgba(255, 255, 255, 0.75);
+    --card-bg-soft: rgba(255, 255, 255, 0.55);
+    --card-bg-strong: rgba(255, 255, 255, 0.9);
+    --card-bg-muted: rgba(252, 253, 255, 0.8);
+    --card-border: rgba(60, 74, 89, 0.18);
+    --card-border-subtle: rgba(60, 74, 89, 0.12);
+    --accent: #2aa198;
+    --accent-soft: rgba(42, 161, 152, 0.18);
+    --accent-soft-text: #3fb5ac;
+    --accent-strong: #268bd2;
+    --accent-strong-hover: #1f79b6;
+  }
+
+  body {
+    background: linear-gradient(180deg, var(--app-bg-from), var(--app-bg-to));
+    color: var(--text);
+  }
+}
+
+@layer components {
+  .bg-app {
+    background: linear-gradient(180deg, var(--app-bg-from), var(--app-bg-to));
+  }
+
+  .bg-card {
+    background-color: var(--card-bg);
+  }
+
+  .bg-card-soft {
+    background-color: var(--card-bg-soft);
+  }
+
+  .bg-card-strong {
+    background-color: var(--card-bg-strong);
+  }
+
+  .bg-card-muted {
+    background-color: var(--card-bg-muted);
+  }
+
+  .border-card {
+    border-color: var(--card-border);
+  }
+
+  .border-card-subtle {
+    border-color: var(--card-border-subtle);
+  }
+
+  .text-theme {
+    color: var(--text);
+  }
+
+  .text-soft {
+    color: var(--text-soft);
+  }
+
+  .text-muted {
+    color: var(--text-muted);
+  }
+
+  .text-subtle {
+    color: var(--text-subtle);
+  }
+
+  .text-accent {
+    color: var(--accent);
+  }
+
+  .text-accent-soft {
+    color: var(--accent-soft-text);
+  }
+
+  .bg-accent-soft {
+    background-color: var(--accent-soft);
+  }
+
+  .bg-accent-strong {
+    background-color: var(--accent-strong);
+  }
+
+  .border-accent {
+    border-color: var(--accent);
+  }
+
+  .border-accent-soft {
+    border-color: var(--accent-soft);
+  }
+
+  .ring-accent {
+    --tw-ring-color: var(--accent);
+  }
+
+  .hover-border-accent-soft:hover {
+    border-color: var(--accent-soft);
+  }
+
+  .hover-bg-card-strong:hover {
+    background-color: var(--card-bg-strong);
+  }
+
+  .hover-bg-card-soft:hover {
+    background-color: var(--card-bg-soft);
+  }
+
+  .hover-bg-accent-strong:hover {
+    background-color: var(--accent-strong-hover);
+  }
+
+  .hover-text-theme:hover {
+    color: var(--text);
+  }
+}
