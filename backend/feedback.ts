@@ -1,4 +1,4 @@
-import { TUTOR_SYSTEM_PROMPT } from "./prompts";
+import { TEST_SYSTEM_PROMPT, TUTOR_SYSTEM_PROMPT } from "./prompts";
 
 export interface ConversationTurn {
   user: string;
@@ -9,6 +9,7 @@ export interface FeedbackInput {
   image: string;
   transcript: string;
   history?: ConversationTurn[];
+  mode?: "feynman" | "test";
 }
 
 export interface FeedbackResult {
@@ -20,7 +21,7 @@ export interface FeedbackError {
 }
 
 export async function getFeedback(input: FeedbackInput): Promise<FeedbackResult | FeedbackError> {
-  const { image, transcript, history = [] } = input;
+  const { image, transcript, history = [], mode = "feynman" } = input;
 
   if (!image) {
     return { error: "Missing image" };
@@ -36,8 +37,11 @@ export async function getFeedback(input: FeedbackInput): Promise<FeedbackResult 
   const model = process.env.FEATHERLESS_MODEL || "google/gemma-3-27b-it";
   const dataUrl = image.startsWith("data:") ? image : `data:image/jpeg;base64,${image}`;
 
+  const systemPrompt =
+    mode === "test" ? TEST_SYSTEM_PROMPT : TUTOR_SYSTEM_PROMPT;
+
   const messages: Array<{ role: string; content: unknown }> = [
-    { role: "system", content: TUTOR_SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
   ];
 
   for (const turn of history) {

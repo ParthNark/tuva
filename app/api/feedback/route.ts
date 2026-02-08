@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
       image: body.image,
       transcript: body.transcript,
       history: body.history ?? [],
+      mode: body.mode,
     });
 
     if ("error" in result) {

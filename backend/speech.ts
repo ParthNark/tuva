@@ -1,16 +1,18 @@
 export interface SpeechInput {
   text: string;
+  voiceId?: string;
 }
 
 export async function generateSpeech(input: SpeechInput): Promise<ArrayBuffer | { error: string }> {
-  const { text } = input;
+  const { text, voiceId: overrideVoiceId } = input;
 
   if (!text || typeof text !== "string") {
     return { error: "Missing text" };
   }
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+  const voiceId =
+    overrideVoiceId || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
 
   if (!apiKey) {
     return { error: "ELEVENLABS_API_KEY is not configured" };
