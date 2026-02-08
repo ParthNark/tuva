@@ -1,61 +1,69 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addMessage, createThread, getThreadMessages } from "@/lib/backboard";
+import { initConversation, getMessages, saveMessages, isBackboardServiceError } from "@/backend/src/services/backboard";
+import { TUTOR_SYSTEM_PROMPT } from "@/backend/prompts";
 
 type ChatRequest = {
   message: string;
   threadId?: string;
+  userId?: string;
 };
 
-type GeminiResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string }>;
-    };
-  }>;
+type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+type FeatherlessResponse = {
+  choices?: Array<{ message?: { content?: string } }>;
 };
 
-function toGeminiContents(
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  latestUserMessage: string
-) {
-  const contents = messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-
-  contents.push({
-    role: "user",
-    parts: [{ text: latestUserMessage }],
-  });
-
-  return contents;
+function buildPrompt(messages: ChatMessage[]): string {
+  return messages.map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`).join("\n");
 }
 
-async function callGemini(messages: Array<{ role: "user" | "assistant"; content: string }>, latestUserMessage: string) {
-  const apiKey = process.env.GEMINI_API_KEY;
+async function callGemma(messages: ChatMessage[]): Promise<string> {
+  const apiKey = process.env.FEATHERLESS_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured");
+    throw new Error("FEATHERLESS_API_KEY is not configured");
   }
 
-  const model = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const model = process.env.FEATHERLESS_MODEL ?? "google/gemma-3-27b-it";
+  const url = "https://api.featherless.ai/v1/chat/completions";
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: toGeminiContents(messages, latestUserMessage),
-    }),
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ model, messages }),
   });
 
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Gemini error: ${response.status} ${err}`);
+    console.warn(`[featherless] messages[] failed: ${response.status} ${err}`);
+    const prompt = buildPrompt(messages);
+
+    const fallback = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!fallback.ok) {
+      const fallbackErr = await fallback.text();
+      throw new Error(`Featherless error: ${fallback.status} ${fallbackErr}`);
+    }
+
+    const fallbackData = (await fallback.json()) as FeatherlessResponse;
+    return fallbackData.choices?.[0]?.message?.content ?? "";
   }
 
-  const data = (await response.json()) as GeminiResponse;
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  return text;
+  const data = (await response.json()) as FeatherlessResponse;
+  return data.choices?.[0]?.message?.content ?? "";
 }
 
 export async function POST(request: NextRequest) {
@@ -65,26 +73,34 @@ export async function POST(request: NextRequest) {
     if (!message) {
       return NextResponse.json({ error: "Missing message" }, { status: 400 });
     }
+    const userId = body.userId?.trim() ?? "local-user";
+    let threadId = body.threadId?.trim();
 
-    let threadId = body.threadId;
     if (!threadId) {
-      const thread = await createThread();
-      threadId = thread.id;
+      threadId = await initConversation(userId);
+      console.log(`[chat] new threadId ${threadId}`);
     }
 
-    const history = await getThreadMessages(threadId);
-    const reply = await callGemini(
-      history.map((m) => ({ role: m.role, content: m.content })),
-      message
-    );
+    const history = await getMessages(threadId);
+    console.log(`[chat] loaded ${history.length} messages for ${threadId}`);
 
-    void Promise.allSettled([
-      addMessage(threadId, "user", message),
-      addMessage(threadId, "assistant", reply),
-    ]);
+    const llmMessages: ChatMessage[] = [
+      { role: "system", content: TUTOR_SYSTEM_PROMPT },
+      ...history,
+      { role: "user", content: message },
+    ];
+
+    const reply = await callGemma(llmMessages);
+    const nextMessages: ChatMessage[] = [...history, { role: "user", content: message }, { role: "assistant", content: reply }];
+    await saveMessages(threadId, nextMessages);
+    console.log(`[chat] saved ${nextMessages.length} messages for ${threadId}`);
 
     return NextResponse.json({ reply, threadId });
   } catch (error) {
+    if (isBackboardServiceError(error)) {
+      console.error("Chat API Backboard error:", error.message);
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Internal server error";
     console.error("Chat API error:", message);
     return NextResponse.json({ error: message }, { status: 500 });

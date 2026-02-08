@@ -27,7 +27,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   if (!isClient) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-app text-theme">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100">
         Initializing...
       </div>
     );

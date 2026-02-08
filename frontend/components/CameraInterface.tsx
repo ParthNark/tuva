@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import { useAuth0 } from "@auth0/auth0-react";
 import Webcam from "react-webcam";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, Video, VideoOff, AlertCircle, Radio, Volume2 } from "lucide-react";
@@ -24,9 +25,17 @@ type PermissionState = "idle" | "requesting" | "granted" | "denied" | "error";
 
 export interface CameraInterfaceProps {
   embedded?: boolean;
+  userId?: string;
 }
 
-export function CameraInterface({ embedded }: CameraInterfaceProps = {}) {
+export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {}) {
+  const { user } = useAuth0();
+  const resolvedUserId = userId || user?.sub || "";
+  const [sessionId] = useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
   const webcamRef = useRef<Webcam>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -239,6 +248,8 @@ export function CameraInterface({ embedded }: CameraInterfaceProps = {}) {
             image: base64,
             transcript: transcriptToUse,
             history: conversationHistory,
+            userId: resolvedUserId,
+            sessionId,
           }),
         });
 

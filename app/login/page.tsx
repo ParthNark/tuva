@@ -16,31 +16,31 @@ export default function LoginPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-theme">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-950 to-slate-900">
+        <div className="text-slate-100">Loading...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-950 to-slate-900">
         <div className="text-red-400">Error: {error.message}</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-950 to-slate-900">
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-theme mb-2">Tuva</h1>
-          <p className="text-muted">Teach to learn using the Feynman Method</p>
+          <h1 className="text-4xl font-bold text-slate-100 mb-2">Tuva</h1>
+          <p className="text-slate-400">Teach to learn using the Feynman Method</p>
         </div>
         <div className="mt-8">
           <button
             onClick={() => loginWithRedirect()}
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-accent-strong hover-bg-accent-strong focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent ring-accent"
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             Log in / Sign up
           </button>

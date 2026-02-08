@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth0 } from "@auth0/auth0-react";
 import { CameraInterface } from "@/frontend/components/CameraInterface";
 import { PageTransition } from "./components/PageTransition";
 import { MessageSquare } from "lucide-react";
@@ -23,6 +24,9 @@ function formatSessionTime() {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth0();
+  const userId = user?.sub ?? "";
+
   return (
     <ProtectedRoute>
       <PageTransition>
@@ -37,7 +41,7 @@ export default function DashboardPage() {
 
             <div className="flex-1 overflow-auto rounded-2xl border border-card bg-card-soft backdrop-blur-md">
               <div className="p-6">
-                <CameraInterface embedded />
+                <CameraInterface embedded userId={userId} />
               </div>
             </div>
           </div>

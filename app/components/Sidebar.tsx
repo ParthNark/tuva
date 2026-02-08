@@ -21,9 +21,9 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-60 flex-shrink-0 border-r border-card bg-card backdrop-blur-md">
+    <aside className="fixed left-0 top-0 z-40 h-screen w-60 flex-shrink-0 border-r border-white/10 bg-slate-900/50 backdrop-blur-md">
       <div className="flex h-full flex-col">
-        <div className="flex h-16 items-center border-b border-card-subtle px-6">
+        <div className="flex h-16 items-center border-b border-white/5 px-6">
           <Link href="/" className="flex items-center gap-2">
             <motion.span
               className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-xl font-bold text-transparent"
@@ -37,9 +37,7 @@ export function Sidebar() {
 
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map((item) => {
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(item.href));
+            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
             const Icon = item.icon;
 
             return (
@@ -48,8 +46,8 @@ export function Sidebar() {
                 href={item.href}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-accent-soft text-accent"
-                    : "text-muted hover-bg-card-soft hover-text-theme"
+                    ? "bg-cyan-500/15 text-cyan-400"
+                    : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
                 }`}
               >
                 <Icon className="h-5 w-5 shrink-0" />
@@ -60,16 +58,14 @@ export function Sidebar() {
         </nav>
 
         {isAuthenticated && (
-          <div className="border-t border-card-subtle p-4 text-sm">
+          <div className="border-t border-white/5 p-4 text-sm">
             <div className="mb-3">
-              <p className="font-semibold text-theme">
-                {user?.name ?? user?.email ?? "Ready to teach"}
-              </p>
-              <p className="text-xs text-subtle">Signed in to Tuva</p>
+              <p className="font-semibold text-slate-100">{user?.name ?? user?.email ?? "Ready to teach"}</p>
+              <p className="text-xs text-slate-500">Signed in to Tuva</p>
             </div>
             <button
               onClick={handleLogout}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-card bg-card-soft px-3 py-2 text-xs font-semibold text-soft transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-200"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-200"
             >
               <LogOut className="h-4 w-4" />
               Logout
