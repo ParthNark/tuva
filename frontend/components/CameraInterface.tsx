@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, type PointerEvent as ReactPointerEvent } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import Webcam from "react-webcam";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,6 +29,7 @@ export interface CameraInterfaceProps {
 }
 
 type SessionMode = "feynman" | "test" | "testing";
+type TeachingMode = "video" | "whiteboard";
 
 export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {}) {
   const { user } = useAuth0();
@@ -54,7 +55,15 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
   const [conversationHistory, setConversationHistory] = useState<{ user: string; assistant: string }[]>([]);
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
   const [mode, setMode] = useState<SessionMode>("feynman");
+  const [teachingMode, setTeachingMode] = useState<TeachingMode>("video");
   const isTestMode = mode === "test" || mode === "testing";
+  const isWhiteboard = teachingMode === "whiteboard";
+  const whiteboardRef = useRef<HTMLCanvasElement>(null);
+  const [whiteboardTool, setWhiteboardTool] = useState<"draw" | "text">("draw");
+  const [whiteboardText, setWhiteboardText] = useState("");
+  const [whiteboardNote, setWhiteboardNote] = useState("");
+  const [whiteboardDrawing, setWhiteboardDrawing] = useState(false);
+  const [whiteboardLastPoint, setWhiteboardLastPoint] = useState<{ x: number; y: number } | null>(null);
   const transcriptRef = useRef("");
   const committedRef = useRef("");
   const interimRef = useRef("");
@@ -70,6 +79,99 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
     setLastTranscript(null);
     setConversationHistory([]);
   }, [mode, isRecording]);
+
+  useEffect(() => {
+    if (isRecording) return;
+    setFeedback(null);
+    setLastTranscript(null);
+    setConversationHistory([]);
+  }, [teachingMode, isRecording]);
+
+  const initializeWhiteboard = useCallback(() => {
+    const canvas = whiteboardRef.current;
+    if (!canvas) return;
+    canvas.width = 960;
+    canvas.height = 540;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.font = "20px system-ui";
+    ctx.fillStyle = "#e2e8f0";
+  }, []);
+
+  useEffect(() => {
+    if (teachingMode !== "whiteboard") return;
+    initializeWhiteboard();
+  }, [initializeWhiteboard, teachingMode]);
+
+  const getWhiteboardPoint = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const canvas = whiteboardRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+    };
+  }, []);
+
+  const clearWhiteboard = useCallback(() => {
+    const canvas = whiteboardRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, []);
+
+  const captureWhiteboardSnapshot = useCallback(() => {
+    const canvas = whiteboardRef.current;
+    if (!canvas) return "";
+    return canvas.toDataURL("image/png");
+  }, []);
+
+  const handleWhiteboardPointerDown = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const canvas = whiteboardRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const point = getWhiteboardPoint(event);
+    if (!point) return;
+
+    if (whiteboardTool === "text") {
+      if (!whiteboardText.trim()) return;
+      ctx.fillText(whiteboardText.trim(), point.x, point.y);
+      return;
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+    setWhiteboardDrawing(true);
+    setWhiteboardLastPoint(point);
+  }, [getWhiteboardPoint, whiteboardText, whiteboardTool]);
+
+  const handleWhiteboardPointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!whiteboardDrawing || whiteboardTool !== "draw") return;
+    const canvas = whiteboardRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const point = getWhiteboardPoint(event);
+    if (!point || !whiteboardLastPoint) return;
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+    setWhiteboardLastPoint(point);
+  }, [getWhiteboardPoint, whiteboardDrawing, whiteboardLastPoint, whiteboardTool]);
+
+  const handleWhiteboardPointerUp = useCallback(() => {
+    setWhiteboardDrawing(false);
+    setWhiteboardLastPoint(null);
+  }, []);
 
   const isMediaSupported =
     mounted && typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
@@ -266,6 +368,7 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
             userId: resolvedUserId,
             sessionId,
             mode,
+            teachingMode: "video",
             mode,
           }),
         });
@@ -305,6 +408,66 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
     }, 150);
   }, [conversationHistory, mode]);
 
+  const sendWhiteboard = useCallback(async () => {
+    const snapshot = captureWhiteboardSnapshot();
+    if (!snapshot) {
+      setMicError("Whiteboard snapshot failed. Please try again.");
+      return;
+    }
+
+    const noteToUse = whiteboardNote.trim() || "I'm explaining the diagram on the whiteboard.";
+    setLoading(true);
+    setFeedback(null);
+    setLastTranscript(noteToUse);
+
+    try {
+      const feedbackRes = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: snapshot,
+          whiteboardSnapshot: snapshot,
+          transcript: noteToUse,
+          history: conversationHistory,
+          userId: resolvedUserId,
+          sessionId,
+          mode,
+          teachingMode: "whiteboard",
+        }),
+      });
+
+      const feedbackData = await feedbackRes.json();
+      if (!feedbackRes.ok) {
+        throw new Error(feedbackData.error || "Failed to get feedback");
+      }
+
+      const text = feedbackData.text || "";
+      setFeedback(text);
+      setConversationHistory((prev) => [...prev, { user: noteToUse, assistant: text }]);
+
+      if (text) {
+        const speechRes = await fetch("/api/speech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, mode }),
+        });
+
+        if (speechRes.ok) {
+          const audioBlob = await speechRes.blob();
+          const url = URL.createObjectURL(audioBlob);
+          const audio = new Audio(url);
+          audio.onended = () => URL.revokeObjectURL(url);
+          await audio.play();
+        }
+      }
+    } catch (err) {
+      setMicError(err instanceof Error ? err.message : "Something went wrong");
+      setFeedback(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [captureWhiteboardSnapshot, conversationHistory, mode, resolvedUserId, sessionId, whiteboardNote]);
+
   const toggleRecording = useCallback(() => {
     if (isRecording) {
       stopRecording();
@@ -336,6 +499,30 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
                 : "Get quizzed with mixed question types and visual answers."}
             </p>
           </div>
+          <div className="flex justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTeachingMode("video")}
+              className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
+                teachingMode === "video"
+                  ? "bg-cyan-500/30 text-cyan-100"
+                  : "bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Video Mode
+            </button>
+            <button
+              type="button"
+              onClick={() => setTeachingMode("whiteboard")}
+              className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
+                teachingMode === "whiteboard"
+                  ? "bg-purple-500/30 text-purple-100"
+                  : "bg-slate-800/50 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Whiteboard Mode
+            </button>
+          </div>
           <div className="flex justify-center">
             <label className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-500">
               Mode
@@ -352,237 +539,330 @@ export function CameraInterface({ embedded, userId }: CameraInterfaceProps = {})
           </div>
         </header>
 
-        <motion.div
-          className="relative rounded-2xl overflow-hidden"
-          initial={false}
-          animate={{
-            boxShadow: isRecording
-              ? "0 0 40px rgba(6, 182, 212, 0.4), 0 0 80px rgba(6, 182, 212, 0.2)"
-              : "0 0 20px rgba(139, 92, 246, 0.2)",
-          }}
-          transition={{ duration: 0.3 }}
-        >
-          <div
-            className={`absolute inset-0 rounded-2xl pointer-events-none z-10 border-2 transition-colors ${
-              isRecording
-                ? "border-cyan-400/80 animate-pulse"
-                : "border-purple-500/30"
-            }`}
-            style={{
-              boxShadow: isRecording
-                ? "inset 0 0 30px rgba(6, 182, 212, 0.15)"
-                : "none",
-            }}
-          />
-
-          <div className="relative aspect-video bg-slate-900/80">
-            {!mounted ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90">
-                <div className="text-center p-6">
-                  <VideoOff className="w-16 h-16 mx-auto text-slate-500 mb-4" />
-                  <p className="text-slate-400 text-sm">Loading...</p>
-                </div>
-              </div>
-            ) : isMediaSupported ? (
-              <Webcam
-                ref={webcamRef}
-                audio={false}
-                screenshotFormat="image/jpeg"
-                videoConstraints={{
-                  facingMode: "user",
-                  width: { ideal: 1280 },
-                  height: { ideal: 720 },
-                }}
-                onUserMedia={handleUserMedia}
-                onUserMediaError={handleUserMediaError}
-                className="w-full h-full object-cover"
-                mirrored
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90">
-                <div className="text-center p-6">
-                  <VideoOff className="w-16 h-16 mx-auto text-slate-500 mb-4" />
-                  <p className="text-slate-400 text-sm">Camera not supported</p>
-                </div>
-              </div>
-            )}
-
-            {(cameraPermission === "denied" || cameraPermission === "error") && (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-900/95 backdrop-blur-sm">
-                <div className="text-center p-6 max-w-sm">
-                  <VideoOff className="w-16 h-16 mx-auto text-red-400/80 mb-4" />
-                  <p className="text-slate-300 text-sm">{cameraError}</p>
-                  <p className="text-slate-500 text-xs mt-2">
-                    Refresh the page and allow camera when prompted.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-
-            <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/40 backdrop-blur-md border border-white/10">
-                <div className="w-2 h-2 rounded-full bg-slate-500" />
-                <span className="text-xs font-mono text-slate-400">SCANNER</span>
-              </div>
-
-              <AnimatePresence>
-                {isRecording && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/20 backdrop-blur-md border border-red-400/50"
-                  >
-                    <motion.span
-                      animate={{ opacity: [1, 0.4, 1] }}
-                      transition={{ repeat: Infinity, duration: 1.5 }}
-                      className="w-2 h-2 rounded-full bg-red-400"
-                    />
-                    <span className="text-xs font-medium text-red-400">REC</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <div className="absolute bottom-4 left-4 right-4 flex gap-2">
-              <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-purple-500"
-                  initial={{ width: "0%" }}
-                  animate={{ width: isRecording ? "100%" : "0%" }}
-                  transition={{ duration: 0.3 }}
-                />
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        <AnimatePresence>
-          {(cameraError || micError) && (
+        {!isWhiteboard ? (
+          <>
+            {/* Video Mode uses camera + mic capture. */}
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30"
+              className="relative rounded-2xl overflow-hidden"
+              initial={false}
+              animate={{
+                boxShadow: isRecording
+                  ? "0 0 40px rgba(6, 182, 212, 0.4), 0 0 80px rgba(6, 182, 212, 0.2)"
+                  : "0 0 20px rgba(139, 92, 246, 0.2)",
+              }}
+              transition={{ duration: 0.3 }}
             >
-              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-              <div className="text-sm text-red-300">
-                {cameraError && <p>{cameraError}</p>}
-                {micError && <p className={cameraError ? "mt-2" : ""}>{micError}</p>}
+              <div
+                className={`absolute inset-0 rounded-2xl pointer-events-none z-10 border-2 transition-colors ${
+                  isRecording
+                    ? "border-cyan-400/80 animate-pulse"
+                    : "border-purple-500/30"
+                }`}
+                style={{
+                  boxShadow: isRecording
+                    ? "inset 0 0 30px rgba(6, 182, 212, 0.15)"
+                    : "none",
+                }}
+              />
+
+              <div className="relative aspect-video bg-slate-900/80">
+                {!mounted ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90">
+                    <div className="text-center p-6">
+                      <VideoOff className="w-16 h-16 mx-auto text-slate-500 mb-4" />
+                      <p className="text-slate-400 text-sm">Loading...</p>
+                    </div>
+                  </div>
+                ) : isMediaSupported ? (
+                  <Webcam
+                    ref={webcamRef}
+                    audio={false}
+                    screenshotFormat="image/jpeg"
+                    videoConstraints={{
+                      facingMode: "user",
+                      width: { ideal: 1280 },
+                      height: { ideal: 720 },
+                    }}
+                    onUserMedia={handleUserMedia}
+                    onUserMediaError={handleUserMediaError}
+                    className="w-full h-full object-cover"
+                    mirrored
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90">
+                    <div className="text-center p-6">
+                      <VideoOff className="w-16 h-16 mx-auto text-slate-500 mb-4" />
+                      <p className="text-slate-400 text-sm">Camera not supported</p>
+                    </div>
+                  </div>
+                )}
+
+                {(cameraPermission === "denied" || cameraPermission === "error") && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/95 backdrop-blur-sm">
+                    <div className="text-center p-6 max-w-sm">
+                      <VideoOff className="w-16 h-16 mx-auto text-red-400/80 mb-4" />
+                      <p className="text-slate-300 text-sm">{cameraError}</p>
+                      <p className="text-slate-500 text-xs mt-2">
+                        Refresh the page and allow camera when prompted.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+
+                <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/40 backdrop-blur-md border border-white/10">
+                    <div className="w-2 h-2 rounded-full bg-slate-500" />
+                    <span className="text-xs font-mono text-slate-400">SCANNER</span>
+                  </div>
+
+                  <AnimatePresence>
+                    {isRecording && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/20 backdrop-blur-md border border-red-400/50"
+                      >
+                        <motion.span
+                          animate={{ opacity: [1, 0.4, 1] }}
+                          transition={{ repeat: Infinity, duration: 1.5 }}
+                          className="w-2 h-2 rounded-full bg-red-400"
+                        />
+                        <span className="text-xs font-medium text-red-400">REC</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <div className="absolute bottom-4 left-4 right-4 flex gap-2">
+                  <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-purple-500"
+                      initial={{ width: "0%" }}
+                      animate={{ width: isRecording ? "100%" : "0%" }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  </div>
+                </div>
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
 
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-800/40 backdrop-blur-md border border-white/5">
-            <div className="flex items-center gap-2">
-              {hasCamera ? (
-                <Video className="w-5 h-5 text-cyan-400" />
-              ) : (
-                <VideoOff className="w-5 h-5 text-slate-500" />
+            <AnimatePresence>
+              {(cameraError || micError) && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30"
+                >
+                  <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                  <div className="text-sm text-red-300">
+                    {cameraError && <p>{cameraError}</p>}
+                    {micError && <p className={cameraError ? "mt-2" : ""}>{micError}</p>}
+                  </div>
+                </motion.div>
               )}
-              <span className="text-sm text-slate-400">
-                Camera {hasCamera ? "ready" : "pending"}
-              </span>
+            </AnimatePresence>
+
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-800/40 backdrop-blur-md border border-white/5">
+                <div className="flex items-center gap-2">
+                  {hasCamera ? (
+                    <Video className="w-5 h-5 text-cyan-400" />
+                  ) : (
+                    <VideoOff className="w-5 h-5 text-slate-500" />
+                  )}
+                  <span className="text-sm text-slate-400">
+                    Camera {hasCamera ? "ready" : "pending"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasMic ? (
+                    <Mic className="w-5 h-5 text-cyan-400" />
+                  ) : (
+                    <MicOff className="w-5 h-5 text-slate-500" />
+                  )}
+                  <span className="text-sm text-slate-400">
+                    Mic {hasMic ? "ready" : "pending"}
+                  </span>
+                </div>
+              </div>
+
+              <motion.button
+                type="button"
+                onClick={toggleRecording}
+                disabled={
+                  loading ||
+                  ((cameraPermission === "requesting" || micPermission === "requesting") &&
+                    !isRecording)
+                }
+                className="flex items-center justify-center gap-3 py-4 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: isRecording
+                    ? "linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.2))"
+                    : "linear-gradient(135deg, rgba(6, 182, 212, 0.3), rgba(139, 92, 246, 0.3))",
+                  border: isRecording
+                    ? "1px solid rgba(239, 68, 68, 0.5)"
+                    : "1px solid rgba(6, 182, 212, 0.4)",
+                  boxShadow: isRecording
+                    ? "0 0 20px rgba(239, 68, 68, 0.3)"
+                    : "0 0 20px rgba(6, 182, 212, 0.2)",
+                }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {loading ? (
+                  <span className="text-slate-300">Processing...</span>
+                ) : cameraPermission === "requesting" || micPermission === "requesting" ? (
+                  <span className="text-slate-300">Requesting access...</span>
+                ) : isRecording ? (
+                  <>
+                    <Radio className="w-5 h-5 text-red-300" />
+                    <span className="text-red-200">Stop</span>
+                  </>
+                ) : (
+                  <>
+                    <Mic className="w-5 h-5 text-cyan-300" />
+                    <span className="text-cyan-200">Start Listening</span>
+                  </>
+                )}
+              </motion.button>
+
+              {feedback && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-4 rounded-xl bg-slate-800/40 backdrop-blur-md border border-cyan-500/20"
+                >
+                  {lastTranscript && (
+                    <p className="text-slate-400 text-xs mb-2 italic">
+                      You said: &quot;{lastTranscript}&quot;
+                    </p>
+                  )}
+                  {!lastTranscript && (
+                    <p className="text-amber-400/80 text-xs mb-2">
+                      No speech detected — using fallback
+                    </p>
+                  )}
+                  <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap mb-3">
+                    {feedback}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const res = await fetch("/api/speech", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ text: feedback, mode }),
+                      });
+                      if (res.ok) {
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const audio = new Audio(url);
+                        audio.onended = () => URL.revokeObjectURL(url);
+                        await audio.play();
+                      }
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-sm font-medium transition-colors"
+                  >
+                    <Volume2 className="w-4 h-4" />
+                    Play again
+                  </button>
+                </motion.div>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              {hasMic ? (
-                <Mic className="w-5 h-5 text-cyan-400" />
-              ) : (
-                <MicOff className="w-5 h-5 text-slate-500" />
-              )}
-              <span className="text-sm text-slate-400">
-                Mic {hasMic ? "ready" : "pending"}
-              </span>
+          </>
+        ) : (
+          <div className="space-y-4">
+            {/* Whiteboard Mode uses drawing + text input (no camera). */}
+            <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+              <canvas
+                ref={whiteboardRef}
+                className="w-full rounded-xl border border-white/10 bg-slate-950"
+                onPointerDown={handleWhiteboardPointerDown}
+                onPointerMove={handleWhiteboardPointerMove}
+                onPointerUp={handleWhiteboardPointerUp}
+                onPointerLeave={handleWhiteboardPointerUp}
+              />
             </div>
-          </div>
 
-          <motion.button
-            type="button"
-            onClick={toggleRecording}
-            disabled={
-              loading ||
-              ((cameraPermission === "requesting" || micPermission === "requesting") &&
-                !isRecording)
-            }
-            className="flex items-center justify-center gap-3 py-4 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: isRecording
-                ? "linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.2))"
-                : "linear-gradient(135deg, rgba(6, 182, 212, 0.3), rgba(139, 92, 246, 0.3))",
-              border: isRecording
-                ? "1px solid rgba(239, 68, 68, 0.5)"
-                : "1px solid rgba(6, 182, 212, 0.4)",
-              boxShadow: isRecording
-                ? "0 0 20px rgba(239, 68, 68, 0.3)"
-                : "0 0 20px rgba(6, 182, 212, 0.2)",
-            }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            {loading ? (
-              <span className="text-slate-300">Processing...</span>
-            ) : cameraPermission === "requesting" || micPermission === "requesting" ? (
-              <span className="text-slate-300">Requesting access...</span>
-            ) : isRecording ? (
-              <>
-                <Radio className="w-5 h-5 text-red-300" />
-                <span className="text-red-200">Stop</span>
-              </>
-            ) : (
-              <>
-                <Mic className="w-5 h-5 text-cyan-300" />
-                <span className="text-cyan-200">Start Listening</span>
-              </>
-            )}
-          </motion.button>
-
-          {feedback && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 rounded-xl bg-slate-800/40 backdrop-blur-md border border-cyan-500/20"
-            >
-              {lastTranscript && (
-                <p className="text-slate-400 text-xs mb-2 italic">
-                  You said: &quot;{lastTranscript}&quot;
-                </p>
-              )}
-              {!lastTranscript && (
-                <p className="text-amber-400/80 text-xs mb-2">
-                  No speech detected — using fallback
-                </p>
-              )}
-              <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap mb-3">
-                {feedback}
-              </p>
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-slate-900/60 p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase tracking-[0.2em] text-slate-500">Tool</span>
+                <button
+                  type="button"
+                  onClick={() => setWhiteboardTool("draw")}
+                  className={`rounded-md px-3 py-1 text-xs ${
+                    whiteboardTool === "draw" ? "bg-cyan-500/20 text-cyan-200" : "text-slate-400"
+                  }`}
+                >
+                  Draw
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWhiteboardTool("text")}
+                  className={`rounded-md px-3 py-1 text-xs ${
+                    whiteboardTool === "text" ? "bg-purple-500/20 text-purple-200" : "text-slate-400"
+                  }`}
+                >
+                  Text
+                </button>
+              </div>
+              <input
+                value={whiteboardText}
+                onChange={(event) => setWhiteboardText(event.target.value)}
+                placeholder="Text to place on the board"
+                className="flex-1 rounded-md border border-white/10 bg-slate-950/60 px-3 py-1 text-xs text-slate-200"
+              />
               <button
                 type="button"
-                onClick={async () => {
-                  const res = await fetch("/api/speech", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ text: feedback, mode }),
-                  });
-                  if (res.ok) {
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    const audio = new Audio(url);
-                    audio.onended = () => URL.revokeObjectURL(url);
-                    await audio.play();
-                  }
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-sm font-medium transition-colors"
+                onClick={clearWhiteboard}
+                className="rounded-md border border-white/10 px-3 py-1 text-xs text-slate-300 hover:text-white"
               >
-                <Volume2 className="w-4 h-4" />
-                Play again
+                Clear
               </button>
-            </motion.div>
-          )}
-        </div>
+            </div>
+
+            <textarea
+              value={whiteboardNote}
+              onChange={(event) => setWhiteboardNote(event.target.value)}
+              placeholder="Explain your diagram (optional)"
+              rows={3}
+              className="w-full rounded-xl border border-white/10 bg-slate-900/60 p-3 text-sm text-slate-200"
+            />
+
+            <button
+              type="button"
+              onClick={sendWhiteboard}
+              disabled={loading}
+              className="rounded-xl border border-white/10 bg-purple-500/20 px-4 py-3 text-sm font-medium text-purple-100 hover:bg-purple-500/30 disabled:opacity-60"
+            >
+              {loading ? "Sending..." : "Send to AI"}
+            </button>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-3">Session</div>
+              {conversationHistory.length === 0 ? (
+                <div className="text-sm text-slate-400">No messages yet.</div>
+              ) : (
+                <div className="space-y-3">
+                  {conversationHistory.map((turn, index) => (
+                    <div key={`${turn.user}-${index}`} className="space-y-2">
+                      <div className="rounded-lg bg-slate-800/60 p-3 text-sm text-slate-200">
+                        {turn.user}
+                      </div>
+                      <div className="rounded-lg border border-white/5 bg-slate-950/60 p-3 text-sm text-slate-100">
+                        {turn.assistant}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </motion.div>
     </div>
   );

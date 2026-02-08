@@ -6,12 +6,14 @@
 // - Threads are retrieved via GET /threads/{thread_id} and listed via GET /threads.
 
 import { randomUUID } from "crypto";
-import { STUDENT_SYSTEM_PROMPT } from "@/backend/prompts";
+import { STUDENT_SYSTEM_PROMPT, TUTOR_SYSTEM_PROMPT, WHITEBOARD_SYSTEM_PROMPT } from "@/backend/prompts";
 
 const BASE_URL = "https://app.backboard.io/api";
 const API_KEY = process.env.BACKBOARD_API_KEY ?? "";
 const ASSISTANT_NAME = "Tuva History Assistant";
 const ASSISTANT_ID = process.env.BACKBOARD_ASSISTANT_ID ?? "";
+const FEATHERLESS_API_KEY = process.env.FEATHERLESS_API_KEY ?? "";
+const FEATHERLESS_MODEL = process.env.FEATHERLESS_MODEL ?? "google/gemma-3-27b-it";
 
 export type HistoryMessage = {
   role: "system" | "user" | "assistant";
@@ -58,7 +60,7 @@ type AssistantRecord = {
 };
 
 const inMemoryStore = new Map<string, HistoryMessage[]>();
-const inMemoryMeta = new Map<string, { userId: string; createdAt: string }>();
+const inMemoryMeta = new Map<string, { userId: string; createdAt: string; title?: string }>();
 let cachedAssistantId: string | null = null;
 
 function logCall(method: string, url: string) {
@@ -115,13 +117,56 @@ async function fetchForm(method: string, url: string, form: FormData) {
   return res.json();
 }
 
+function isPromptContent(content: string) {
+  const normalized = content.trim();
+  return (
+    normalized.startsWith("You are \"Tuva\"") ||
+    normalized.startsWith("You are an eager student") ||
+    normalized.startsWith("You are the \"Tuva Exam Proctor\"") ||
+    normalized.startsWith(TUTOR_SYSTEM_PROMPT.trim().slice(0, 24)) ||
+    normalized.startsWith(STUDENT_SYSTEM_PROMPT.trim().slice(0, 24)) ||
+    normalized.startsWith(WHITEBOARD_SYSTEM_PROMPT.trim().slice(0, 24))
+  );
+}
+
 function deriveTitle(messages: HistoryMessage[]): string | undefined {
-  const firstUser = messages.find((msg) => msg.role === "user");
-  return firstUser?.content?.slice(0, 48).trim();
+  const firstUser = messages.find(
+    (msg) => msg.role === "user" && msg.content.trim().length > 0 && !isPromptContent(msg.content)
+  );
+  const fallback = firstUser?.content?.slice(0, 48).trim();
+  return fallback || "New Conversation";
+}
+
+function sanitizeTitle(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value.replace(/["'“”‘’.!,?]/g, "").trim();
+  if (!cleaned) return undefined;
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length < 3) return words.join(" ");
+  if (words.length > 6) return words.slice(0, 6).join(" ");
+  return words.join(" ");
+}
+
+function extractStoredTitle(thread: ThreadRecord): string | undefined {
+  const threadTitle = thread.metadata?.title ?? thread.metadata_?.title;
+  if (typeof threadTitle === "string") return sanitizeTitle(threadTitle);
+  const messageTitle = thread.messages
+    ?.map((msg) => msg.metadata ?? msg.metadata_)
+    .find((meta) => meta && typeof (meta as { title?: unknown }).title === "string") as
+    | { title?: string }
+    | undefined;
+  return sanitizeTitle(messageTitle?.title);
 }
 
 function normalizeMessages(messages: ThreadRecord["messages"]): HistoryMessage[] {
-  return (messages ?? []).map((msg) => {
+  return (messages ?? [])
+    .filter((msg) => {
+      const titleMeta =
+        (msg.metadata && typeof msg.metadata.title === "string") ||
+        (msg.metadata_ && typeof msg.metadata_.title === "string");
+      return !titleMeta;
+    })
+    .map((msg) => {
     const metadataRole =
       (msg.metadata && typeof msg.metadata.role === "string" ? msg.metadata.role : undefined) ??
       (msg.metadata_ && typeof msg.metadata_.role === "string" ? msg.metadata_.role : undefined);
@@ -214,7 +259,12 @@ async function listAssistantThreads(assistantId: string): Promise<ThreadRecord[]
   return fetchJson<ThreadRecord[]>("GET", `${BASE_URL}/assistants/${assistantId}/threads`);
 }
 
-async function appendMessage(threadId: string, message: HistoryMessage, userId: string) {
+async function appendMessage(
+  threadId: string,
+  message: HistoryMessage,
+  userId: string,
+  extraMetadata?: Record<string, unknown>
+) {
   const form = new FormData();
   form.append("content", message.content);
   form.append("stream", "false");
@@ -225,9 +275,43 @@ async function appendMessage(threadId: string, message: HistoryMessage, userId: 
     userId,
     user_id: userId,
     custom_timestamp: message.timestamp ?? new Date().toISOString(),
+    ...(extraMetadata ?? {}),
   }));
 
   await fetchForm("POST", `${BASE_URL}/threads/${threadId}/messages`, form);
+}
+
+async function generateTitleFromMessages(messages: HistoryMessage[]): Promise<string | undefined> {
+  if (!FEATHERLESS_API_KEY) return undefined;
+  const snippet = messages
+    .filter((msg) => msg.role !== "system")
+    .slice(0, 4)
+    .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
+    .join("\n");
+
+  const prompt = `Summarize the following conversation into a short, descriptive title (3-6 words). No punctuation. No quotes. No emojis.\n\n${snippet}`;
+
+  const response = await fetch("https://api.featherless.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${FEATHERLESS_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: FEATHERLESS_MODEL,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    console.warn(`[title] Featherless error: ${response.status} ${err}`);
+    return undefined;
+  }
+
+  const data = await response.json();
+  const rawTitle = data.choices?.[0]?.message?.content as string | undefined;
+  return sanitizeTitle(rawTitle);
 }
 
 export async function initConversation(userId: string): Promise<string> {
@@ -266,11 +350,13 @@ export async function getConversation(threadId: string, userId: string): Promise
     throw new Error("Conversation not found");
   }
 
+  const storedTitle = extractStoredTitle(thread);
+
   const updatedAt = messages[messages.length - 1]?.timestamp ?? thread.created_at ?? new Date().toISOString();
   return {
     conversationId: threadId,
     userId,
-    title: deriveTitle(messages),
+    title: storedTitle ?? deriveTitle(messages),
     updatedAt,
     messages,
   };
@@ -286,7 +372,7 @@ export async function listConversations(userId: string): Promise<ConversationSum
         return {
           conversationId,
           userId: meta.userId,
-          title: deriveTitle(messages),
+          title: meta.title ?? deriveTitle(messages),
           updatedAt: messages[messages.length - 1]?.timestamp ?? meta.createdAt,
           messageCount: messages.length,
         };
@@ -314,7 +400,7 @@ export async function listConversations(userId: string): Promise<ConversationSum
     summaries.push({
       conversationId: threadId,
       userId: owner,
-      title: deriveTitle(messages),
+      title: extractStoredTitle(fullThread) ?? deriveTitle(messages),
       updatedAt: messages[messages.length - 1]?.timestamp ?? fullThread.created_at ?? new Date().toISOString(),
       messageCount: messages.length,
     });
@@ -329,7 +415,8 @@ export async function appendUserAndAssistantMessages(
   threadId: string,
   userId: string,
   userMessage: string,
-  assistantMessage: string
+  assistantMessage: string,
+  metadata?: Record<string, unknown>
 ) {
   ensureApiKey();
   const now = new Date().toISOString();
@@ -339,11 +426,38 @@ export async function appendUserAndAssistantMessages(
   if (!API_KEY) {
     const existing = inMemoryStore.get(threadId) ?? [];
     inMemoryStore.set(threadId, [...existing, userEntry, assistantEntry]);
+    const meta = inMemoryMeta.get(threadId);
+    if (meta && !meta.title) {
+      const title = sanitizeTitle(userMessage) ?? "New Conversation";
+      inMemoryMeta.set(threadId, { ...meta, title });
+    }
     console.warn(`[backboard] in-memory save for ${threadId}`);
     return;
   }
 
-  await appendMessage(threadId, userEntry, userId);
-  await appendMessage(threadId, assistantEntry, userId);
+  await appendMessage(threadId, userEntry, userId, metadata);
+  const teachingMode =
+    metadata && typeof (metadata as { teachingMode?: unknown }).teachingMode === "string"
+      ? (metadata as { teachingMode?: string }).teachingMode
+      : null;
+  await appendMessage(threadId, assistantEntry, userId, teachingMode ? { teachingMode } : undefined);
+
+  try {
+    const thread = await getThread(threadId);
+    const storedTitle = extractStoredTitle(thread);
+    if (!storedTitle) {
+      const titleSeed: HistoryMessage[] = [userEntry, assistantEntry];
+      const generated = await generateTitleFromMessages(titleSeed);
+      const finalTitle = generated ?? "New Conversation";
+      await appendMessage(
+        threadId,
+        { role: "system", content: finalTitle },
+        userId,
+        { title: finalTitle }
+      );
+    }
+  } catch (err) {
+    console.warn("[title] generation skipped:", err);
+  }
   console.log(`[backboard] saved messages for ${threadId}`);
 }

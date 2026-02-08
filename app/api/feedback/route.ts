@@ -6,11 +6,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    const whiteboardSnapshot =
+      typeof body.whiteboardSnapshot === "string" ? body.whiteboardSnapshot.trim() : "";
+    const teachingMode = body.teachingMode === "whiteboard" ? "whiteboard" : "video";
+    const resolvedImage = whiteboardSnapshot || body.image;
+
     const result = await getFeedback({
-      image: body.image,
+      image: resolvedImage,
       transcript: body.transcript,
       history: body.history ?? [],
       mode: body.mode,
+      teachingMode,
     });
 
     if ("error" in result) {
@@ -46,7 +52,10 @@ export async function POST(request: NextRequest) {
 
       try {
         const transcript = typeof body.transcript === "string" ? body.transcript : "";
-        await appendUserAndAssistantMessages(threadId, userId, transcript, result.text);
+        await appendUserAndAssistantMessages(threadId, userId, transcript, result.text, {
+          teachingMode,
+          whiteboardSnapshot: teachingMode === "whiteboard" ? whiteboardSnapshot || null : null,
+        });
         console.log(`[history] saved feedback messages: userId=${userId} threadId=${threadId}`);
       } catch (err) {
         console.error("History persistence error:", err);

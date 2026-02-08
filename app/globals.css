@@ -24,6 +24,27 @@
     --accent-strong-hover: #1d4ed8;
   }
 
+  [data-theme="tuva-light"] {
+    color-scheme: light;
+    --app-bg-from: #ffffff;
+    --app-bg-to: #ffffff;
+    --text: #0f172a;
+    --text-soft: #1f2937;
+    --text-muted: #475569;
+    --text-subtle: #64748b;
+    --card-bg: #ffffff;
+    --card-bg-soft: rgba(255, 255, 255, 0.9);
+    --card-bg-strong: #ffffff;
+    --card-bg-muted: #f8fafc;
+    --card-border: rgba(15, 23, 42, 0.12);
+    --card-border-subtle: rgba(15, 23, 42, 0.08);
+    --accent: #2563eb;
+    --accent-soft: rgba(37, 99, 235, 0.14);
+    --accent-soft-text: #3b82f6;
+    --accent-strong: #1d4ed8;
+    --accent-strong-hover: #1e40af;
+  }
+
   [data-theme="dracula"] {
     color-scheme: dark;
     --app-bg-from: #1f1a30;
@@ -197,5 +218,9 @@
   .darkveil-canvas--light {
     opacity: 0.25;
     mix-blend-mode: screen;
+  }
+
+  .darkveil-canvas--white {
+    opacity: 0;
   }
 }

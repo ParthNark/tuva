@@ -1,16 +1,18 @@
 "use client";
 
 import { useAuth0 } from "@auth0/auth0-react";
+import { useEffect, useState } from "react";
 import { CameraInterface } from "@/frontend/components/CameraInterface";
 import { PageTransition } from "./components/PageTransition";
 import { MessageSquare } from "lucide-react";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
-const MOCK_RECENT_FEEDBACK = [
-  { id: 1, text: "Great start! Try explaining recursion as 'a function that calls itself' — that's the core idea.", time: "2 min ago" },
-  { id: 2, text: "You're on the right track. What happens when n reaches 0? That's your base case.", time: "5 min ago" },
-  { id: 3, text: "Simplify further — imagine explaining to a 10-year-old. Remove the jargon.", time: "8 min ago" },
-];
+type InsightsResponse = {
+  status?: "ok" | "insufficient";
+  strengths?: string[];
+  improvements?: string[];
+  message?: string;
+};
 
 function formatSessionTime() {
   const now = new Date();
@@ -26,6 +28,25 @@ function formatSessionTime() {
 export default function DashboardPage() {
   const { user } = useAuth0();
   const userId = user?.sub ?? "";
+  const [insights, setInsights] = useState<InsightsResponse | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    const loadInsights = async () => {
+      setInsightsLoading(true);
+      try {
+        const res = await fetch(`/api/insights?userId=${encodeURIComponent(userId)}`);
+        const data = (await res.json()) as InsightsResponse;
+        setInsights(data);
+      } catch {
+        setInsights({ status: "insufficient", message: "Teach a few more sessions to unlock insights." });
+      } finally {
+        setInsightsLoading(false);
+      }
+    };
+    void loadInsights();
+  }, [userId]);
 
   return (
     <ProtectedRoute>
@@ -50,19 +71,34 @@ export default function DashboardPage() {
             <div className="sticky top-6 rounded-xl border border-card bg-card p-4 backdrop-blur-md">
               <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-soft">
                 <MessageSquare className="h-4 w-4 text-accent" />
-                Recent Feedback
+                Teaching Insights
               </h3>
-              <ul className="space-y-3">
-                {MOCK_RECENT_FEEDBACK.map((item) => (
-                  <li
-                    key={item.id}
-                    className="rounded-lg border border-card-subtle bg-card-muted p-3 text-sm"
-                  >
-                    <p className="text-soft">{item.text}</p>
-                    <p className="mt-2 text-xs text-subtle">{item.time}</p>
-                  </li>
-                ))}
-              </ul>
+              {insightsLoading ? (
+                <div className="text-sm text-subtle">Generating insights...</div>
+              ) : insights?.status === "ok" ? (
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-subtle">Strengths</div>
+                    <ul className="mt-2 list-disc space-y-2 pl-5 text-soft">
+                      {(insights.strengths ?? []).map((item, index) => (
+                        <li key={`strength-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-subtle">Opportunities to Improve</div>
+                    <ul className="mt-2 list-disc space-y-2 pl-5 text-soft">
+                      {(insights.improvements ?? []).map((item, index) => (
+                        <li key={`improve-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-card-subtle bg-card-muted p-3 text-sm text-soft">
+                  {insights?.message ?? "Teach a few more sessions to unlock insights."}
+                </div>
+              )}
             </div>
           </aside>
         </div>

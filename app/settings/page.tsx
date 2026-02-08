@@ -5,6 +5,7 @@ import { ProtectedRoute } from "@/app/components/ProtectedRoute";
 import { motion } from "framer-motion";
 import { Mic, Video, Bell, Palette } from "lucide-react";
 import { useTheme } from "@/app/hooks/useTheme";
+import { DEFAULT_THEME } from "@/app/theme/themes";
 import { useEffect, useState } from "react";
 
 export default function SettingsPage() {
@@ -156,7 +157,11 @@ export default function SettingsPage() {
                 Theme
               </h2>
               <p className="mt-1 text-sm text-muted">
-                {currentTheme ? `${currentTheme.label} is active.` : "Select a theme."}
+                {currentTheme
+                  ? `${currentTheme.label}${
+                      currentTheme.id === DEFAULT_THEME ? " (Default)" : ""
+                    } is active.`
+                  : "Select a theme."}
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {themes.map((option) => {
@@ -176,6 +181,7 @@ export default function SettingsPage() {
                     >
                       <p className="text-sm font-semibold text-theme">
                         {option.label}
+                        {option.id === DEFAULT_THEME ? " (Default)" : ""}
                       </p>
                       <p className="mt-1 text-xs text-muted">
                         {option.description}

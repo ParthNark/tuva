@@ -32,16 +32,26 @@ const THEME_VEIL = {
     scanlineFrequency: 0.9,
     warpAmount: 0.04,
   },
+  "tuva-light": {
+    hueShift: 0,
+    noiseIntensity: 0,
+    scanlineIntensity: 0,
+    scanlineFrequency: 0,
+    warpAmount: 0,
+  },
 } as const;
 
 export function DarkVeilBackground() {
   const { theme } = useTheme();
   const settings = THEME_VEIL[theme] ?? THEME_VEIL.tokyo;
-  const backgroundColor = theme === "light" ? "#fdf6e3" : undefined;
+  const backgroundColor =
+    theme === "light" ? "#fdf6e3" : theme === "tuva-light" ? "#ffffff" : undefined;
   const canvasClassName =
     theme === "light"
       ? "darkveil-canvas darkveil-canvas--light"
-      : "darkveil-canvas";
+      : theme === "tuva-light"
+        ? "darkveil-canvas darkveil-canvas--white"
+        : "darkveil-canvas";
 
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">

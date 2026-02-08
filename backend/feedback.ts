@@ -1,4 +1,4 @@
-import { TEST_SYSTEM_PROMPT, TUTOR_SYSTEM_PROMPT } from "./prompts";
+import { TEST_SYSTEM_PROMPT, TUTOR_SYSTEM_PROMPT, WHITEBOARD_SYSTEM_PROMPT } from "./prompts";
 
 export interface ConversationTurn {
   user: string;
@@ -10,6 +10,7 @@ export interface FeedbackInput {
   transcript: string;
   history?: ConversationTurn[];
   mode?: "feynman" | "test" | "testing";
+  teachingMode?: "video" | "whiteboard";
 }
 
 export interface FeedbackResult {
@@ -21,7 +22,7 @@ export interface FeedbackError {
 }
 
 export async function getFeedback(input: FeedbackInput): Promise<FeedbackResult | FeedbackError> {
-  const { image, transcript, history = [], mode = "feynman" } = input;
+  const { image, transcript, history = [], mode = "feynman", teachingMode = "video" } = input;
 
   if (!image) {
     return { error: "Missing image" };
@@ -37,8 +38,12 @@ export async function getFeedback(input: FeedbackInput): Promise<FeedbackResult 
   const model = process.env.FEATHERLESS_MODEL || "google/gemma-3-27b-it";
   const dataUrl = image.startsWith("data:") ? image : `data:image/jpeg;base64,${image}`;
 
-  const systemPrompt =
-    mode === "test" || mode === "testing" ? TEST_SYSTEM_PROMPT : TUTOR_SYSTEM_PROMPT;
+  const isTestMode = mode === "test" || mode === "testing";
+  const systemPrompt = isTestMode
+    ? TEST_SYSTEM_PROMPT
+    : teachingMode === "whiteboard"
+      ? WHITEBOARD_SYSTEM_PROMPT
+      : TUTOR_SYSTEM_PROMPT;
 
   const messages: Array<{ role: string; content: unknown }> = [
     { role: "system", content: systemPrompt },
@@ -54,7 +59,9 @@ export async function getFeedback(input: FeedbackInput): Promise<FeedbackResult 
 
   const currentUserText = transcriptText
     ? `The student says: "${transcriptText}". What feedback do you have?`
-    : "Look at what the student is working on. What feedback or observations do you have?";
+    : teachingMode === "whiteboard"
+      ? "The student is teaching with a whiteboard diagram. Ask clarifying questions about what is drawn."
+      : "Look at what the student is working on. What feedback or observations do you have?";
 
   messages.push({
     role: "user",

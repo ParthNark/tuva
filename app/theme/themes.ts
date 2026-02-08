@@ -1,5 +1,10 @@
 export const THEMES = [
   {
+    id: "tuva-light",
+    label: "Tuva Light",
+    description: "Bright, clean canvas for focused learning.",
+  },
+  {
     id: "tokyo",
     label: "Tokyo Night",
     description: "Deep navy with neon cyan accents.",
@@ -23,4 +28,4 @@ export const THEMES = [
 
 export type ThemeKey = (typeof THEMES)[number]["id"];
 
-export const DEFAULT_THEME: ThemeKey = "tokyo";
+export const DEFAULT_THEME: ThemeKey = "tuva-light";
